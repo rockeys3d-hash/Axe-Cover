@@ -7,7 +7,8 @@ Parametric, 3D-printable TPU blade cover for competition throwing hatchets.
 ## Design
 
 - Blade pocket: 2.5 in deep × 4.25 in along the edge (covers the 4 in legal edge max)
-- Wedge pocket: 12.7 mm at the open back, tapering to a 1.5 mm slot at the cutting edge
+- Pocket is open along the entire back (full 4.25 in), so the whole cutting edge can slide in
+- Pocket thickness follows `BLADE_PROFILE` (blade thickness measured back from the edge) plus `CLEARANCE` per side. The defaults are estimates; replace them with caliper readings from your blade
 - 2.5 mm face walls, 4 mm wall in front of the edge
 - Retention: a nub on each face, plus an optional 148 × 12 × 2 mm strap with 3 adjustment holes
 
@@ -24,7 +25,7 @@ Parametric, 3D-printable TPU blade cover for competition throwing hatchets.
 
 - Material: TPU
 - Orientation: blade's top edge on the bed, cutting edge vertical, no supports (the 3MF is already oriented)
-- Print the fit-test band first and slide it onto the blade from the back. If it is too tight or too loose, adjust `BACK_THK` / `EDGE_THK` and regenerate.
+- Print the fit-test band first and slide it onto the blade from the back. If it is too tight or too loose, adjust `BLADE_PROFILE` or `CLEARANCE` and regenerate.
 
 ## Regenerating
 

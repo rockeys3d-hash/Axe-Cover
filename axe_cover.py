@@ -16,12 +16,27 @@ IN = 25.4
 # ---------------- parameters ----------------
 POCKET_DEPTH = 2.5 * IN      # back opening -> cutting edge
 POCKET_LEN = 4.25 * IN       # along cutting edge (covers 4" legal max)
-BACK_THK = 0.5 * IN          # pocket thickness at the open back
-EDGE_THK = 1.5               # pocket thickness at the edge slot
+
+# Blade thickness profile: (distance back from the cutting edge mm, blade thickness mm).
+# Placeholder estimates for a typical competition hatchet with a convex grind.
+# Replace with calipers readings from the real blade for a proper fit.
+BLADE_PROFILE = [
+    (0.0, 0.8),
+    (3.0, 2.2),
+    (6.0, 3.4),
+    (10.0, 4.6),
+    (20.0, 6.6),
+    (35.0, 8.8),
+    (POCKET_DEPTH + 5.0, 12.7),
+]
+CLEARANCE = 0.4              # extra gap per side (TPU prints slightly fat)
 FACE_WALL = 2.5
 EDGE_WALL = 4.0
-CURVE_TOP = 42.0             # where the lower sweep meets the back (Y)
-CURVE_BOTTOM_X = 30.0        # where the lower sweep meets the bottom (X)
+# Lower-back corner of the cover is cut away along this sweep (saves TPU, shows
+# the axe's beard). The POCKET stays a full rectangle open along the whole back,
+# so the full-length cutting edge can slide in.
+CURVE_TOP = 42.0             # where the sweep meets the back (Y)
+CURVE_BOTTOM_X = 30.0        # where the sweep meets the bottom (X)
 CURVE_CTRL = (25.0, 21.0)    # quadratic Bezier control point for the sweep
 
 NUB_POS = (9.0, CURVE_TOP + 7.0)  # nub center (X, Y) on each face
@@ -39,33 +54,45 @@ def bezier(p0, c, p2, n=24):
     return (1 - t) ** 2 * np.array(p0) + 2 * (1 - t) * t * np.array(c) + t ** 2 * np.array(p2)
 
 
-def blade_profile():
-    """Pocket outline in the XY plane (side profile)."""
+def outer_profile():
+    """Cover outline in the XY plane (side profile), before wall offset."""
     sweep = bezier((0.0, CURVE_TOP), CURVE_CTRL, (CURVE_BOTTOM_X, 0.0))
-    pts = [(-2.0, POCKET_LEN), (-2.0, CURVE_TOP)]          # extend past back -> open
+    pts = [(-2.0, POCKET_LEN), (-2.0, CURVE_TOP)]
     pts += [tuple(p) for p in sweep]
     pts += [(POCKET_DEPTH, 0.0), (POCKET_DEPTH, POCKET_LEN)]
     return CrossSection([pts])
 
 
-def wedge(back_half, edge_half, x_end, nose=None, y0=-50, y1=250):
-    """Wedge prism: XZ cross-section extruded along Y."""
-    xs = [(-5.0, -back_half), (POCKET_DEPTH, -edge_half)]
-    if nose:
-        xs += [(x_end, -nose), (x_end, nose)]
-    else:
-        xs += [(x_end, -edge_half), (x_end, edge_half)]
-    xs += [(POCKET_DEPTH, edge_half), (-5.0, back_half)]
-    # extrude along +Z then rotate so extrusion axis -> +Y
-    m = Manifold.extrude(CrossSection([xs]), y1 - y0)
-    m = m.rotate((-90, 0, 0))            # (x, z_cs, h) -> extrusion along -Y... fix below
+def pocket_profile():
+    """Pocket side profile: full rectangle, open along the entire back edge.
+    The blade's cutting edge is its longest dimension, so the opening it slides
+    through must be at least as long as the edge."""
+    return CrossSection.square((POCKET_DEPTH + 10.0, POCKET_LEN)).translate((-10.0, 0.0))
+
+
+def half_thickness(x, extra=0.0):
+    """Pocket half-thickness at depth x (x = POCKET_DEPTH is the cutting edge)."""
+    d = POCKET_DEPTH - x
+    ds, ts = zip(*BLADE_PROFILE)
+    return float(np.interp(d, ds, ts)) / 2 + CLEARANCE + extra
+
+
+def wedge(extra, x_end, nose=None, y0=-50, y1=250):
+    """Thickness prism: XZ cross-section from BLADE_PROFILE, extruded along Y."""
+    xs = np.linspace(-5.0, POCKET_DEPTH, 60)
+    top = [(x, half_thickness(x, extra)) for x in xs]
+    edge_h = half_thickness(POCKET_DEPTH, extra)
+    nose_h = edge_h if nose is None else nose
+    poly = [(x, -z) for x, z in top] + [(x_end, -nose_h), (x_end, nose_h)] + [(x, z) for x, z in reversed(top)]
+    m = Manifold.extrude(CrossSection([poly]), y1 - y0)
+    m = m.rotate((-90, 0, 0))
     bb = m.bounding_box()
     return m.translate((0, y0 - bb[1], 0))
 
 
 def build_cover():
-    prof = blade_profile()
-    pocket2d = prof
+    prof = outer_profile()
+    pocket2d = pocket_profile()
     outer2d = prof.offset(FACE_WALL, circular_segments=SEG)
     # trim outer at the open back (x >= 0) and give the edge its thicker wall
     band = CrossSection.square((EDGE_WALL + 1, POCKET_LEN + 2 * FACE_WALL)).translate(
@@ -77,16 +104,15 @@ def build_cover():
     outer_side = Manifold.extrude(outer2d, 2 * H).translate((0, 0, -H))
     pocket_side = Manifold.extrude(pocket2d, 2 * H).translate((0, 0, -H))
 
-    bh, eh = BACK_THK / 2, EDGE_THK / 2
-    outer_w = wedge(bh + FACE_WALL, eh + FACE_WALL, POCKET_DEPTH + EDGE_WALL, nose=eh + FACE_WALL * 0.6)
-    pocket_w = wedge(bh, eh, POCKET_DEPTH)
+    eh = half_thickness(POCKET_DEPTH)
+    outer_w = wedge(FACE_WALL, POCKET_DEPTH + EDGE_WALL, nose=eh + FACE_WALL * 0.6)
+    pocket_w = wedge(0.0, POCKET_DEPTH + 0.01)
 
     cover = (outer_side ^ outer_w) - (pocket_side ^ pocket_w)
 
     # nubs on both faces
     nx, ny = NUB_POS
-    face_z = (bh + FACE_WALL) - ((bh - eh) / POCKET_DEPTH) * (nx + 5.0) * (POCKET_DEPTH / (POCKET_DEPTH + 5.0))
-    face_z = bh + FACE_WALL - (bh - eh) * (nx + 5.0) / (POCKET_DEPTH + 5.0)
+    face_z = half_thickness(nx, FACE_WALL)
     stem = Manifold.cylinder(NUB_STEM_H + 1.0, NUB_STEM_D / 2, NUB_STEM_D / 2, SEG).translate((0, 0, -1.0))
     cone = Manifold.cylinder(NUB_CHAMFER_H, NUB_STEM_D / 2, NUB_HEAD_D / 2, SEG).translate((0, 0, NUB_STEM_H))
     cap = Manifold.cylinder(NUB_CAP_H, NUB_HEAD_D / 2, NUB_HEAD_D / 2 - 0.4, SEG).translate(
