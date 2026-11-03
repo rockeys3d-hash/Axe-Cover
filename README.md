@@ -4,7 +4,18 @@ Parametric, 3D-printable TPU blade cover for competition throwing hatchets.
 
 ![Preview](axe_cover_preview.png)
 
-## Design
+## Two styles
+
+- **Block sleeve (`axe_sleeve.py`)**: rectangular block with a straight slot open along one long side, like the block covers used at axe-throwing venues. Simple to print and fit: only `SLOT_GAP` (blade thickness at `SLOT_DEPTH` back from the edge, plus about 0.8 mm) needs measuring. Prints standing on the edge wall, slot opening up, no supports. Flat 4 mm faces leave room for a debossed logo.
+- **Contoured cover (`axe_cover.py`)**: follows the blade's taper and beard; described below.
+
+```sh
+python axe_sleeve.py axe_sleeve.3mf   # also writes axe_sleeve_fit_test.3mf
+```
+
+![Sleeve preview](axe_sleeve_preview.png)
+
+## Contoured cover design
 
 - Blade pocket: 2.5 in deep × 4.25 in along the edge (covers the 4 in legal edge max)
 - Pocket is open along the entire back (full 4.25 in), so the whole cutting edge can slide in
